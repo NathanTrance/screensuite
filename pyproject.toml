@@ -89,6 +89,11 @@ members = [
 osworld = { workspace = true }
 android_world = { workspace = true }
 
+[tool.uv.extra-build-dependencies]
+# Submodule packages build with setuptools APIs removed in v82+ (pkg_resources)
+android-world = ["setuptools<82"]
+osworld = ["setuptools<82"]
+
 [tool.tomlsort]
 no_sort_tables = true
 sort_inline_arrays = true
