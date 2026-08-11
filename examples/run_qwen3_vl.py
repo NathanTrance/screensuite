@@ -21,6 +21,7 @@ import os
 from datetime import datetime
 
 from dotenv import load_dotenv
+import httpx
 
 try:
     from smolagents import OpenAIModel
@@ -97,6 +98,9 @@ def main():
     parser.add_argument("--load-full", action="store_true",
                         help="Load the full dataset instead of slicing to the number of samples "
                              "(matches the blog protocol exactly; much slower first run)")
+    parser.add_argument("--insecure", action="store_true",
+                        help="Skip TLS certificate verification for the model endpoint "
+                             "(use only on trusted networks / corporate proxies with self-signed certs)")
     parser.add_argument("--no-resize", action="store_true",
                         help="Send images at original resolution (default: Qwen smart-resize, same as the blog run)")
     parser.add_argument("--benchmarks", type=str, nargs="*", default=None,
@@ -124,13 +128,24 @@ def main():
         if "multistep" not in b.tags:
             print(f"  - {b.name}")
 
-    model = SERVER_MODEL_CLS(
+    model_kwargs = dict(
         model_id=args.model_id,
         api_base=args.api_base,
         api_key=args.api_key,
         max_tokens=args.max_tokens,
         temperature=0,
     )
+    if args.insecure:
+        print("WARNING: skipping TLS certificate verification for the model endpoint")
+        model_kwargs["client_kwargs"] = {"http_client": httpx.Client(verify=False)}
+    try:
+        model = SERVER_MODEL_CLS(**model_kwargs)
+    except TypeError:
+        if "client_kwargs" in model_kwargs:
+            model_kwargs.pop("client_kwargs")
+            model = SERVER_MODEL_CLS(**model_kwargs)
+        else:
+            raise
 
     if args.smoke:
         # test_mode selects `parallel_workers` samples; max_samples_to_test must not be set in test mode
