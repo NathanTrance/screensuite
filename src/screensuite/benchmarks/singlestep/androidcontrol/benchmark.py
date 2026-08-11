@@ -115,8 +115,19 @@ def convert_android_control_operation(operation_dict: dict[str, Any]) -> Operati
 
 
 class AndroidControlBenchmark(HubBaseBenchmark[AndroidControlConfig, None]):
-    def load(self, streaming: bool = False) -> None:
-        self.dataset: Dataset = load_dataset(self.config.hf_repo, split=self.config.split, streaming=streaming)  # type: ignore
+    def load(self, streaming: bool = False, max_samples: int | None = None) -> None:
+        split = self.config.split
+        if max_samples is not None:
+            try:
+                self.dataset = load_dataset(  # type: ignore
+                    self.config.hf_repo, split=f"{split}[:{max_samples}]", streaming=streaming
+                )
+                return
+            except Exception as e:
+                print(f"Split slicing not supported, loading full split and selecting first {max_samples} rows ({e})")
+        self.dataset = load_dataset(self.config.hf_repo, split=split, streaming=streaming)  # type: ignore
+        if max_samples is not None:
+            self.dataset = self.dataset.select(range(min(max_samples, len(self.dataset))))
 
     def _get_annotated_input_from_sample(
         self, sample_dict: dict[str, list[Any] | str], evaluation_config: EvaluationConfig

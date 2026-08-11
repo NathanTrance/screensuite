@@ -40,7 +40,7 @@ ActionGroundTruth = NormalizedBoundingBox
 
 
 class ShowdownClicksBenchmark(HubBaseBenchmark[ShowdownClicksConfig, None]):
-    def load(self, streaming: bool = False) -> None:
+    def load(self, streaming: bool = False, max_samples: int | None = None) -> None:
         from huggingface_hub import snapshot_download
 
         snapshot_download(
@@ -49,7 +49,17 @@ class ShowdownClicksBenchmark(HubBaseBenchmark[ShowdownClicksConfig, None]):
             local_dir="downloaded_data",
             ignore_patterns=[".gitattributes", "README.md"],
         )
-        self.dataset = load_dataset(self.config.hf_repo, split=self.config.split, streaming=streaming)
+        split = self.config.split
+        if max_samples is not None:
+            try:
+                split = f"{split}[:{max_samples}]"
+                self.dataset = load_dataset(self.config.hf_repo, split=split, streaming=streaming)
+            except Exception as e:
+                print(f"Split slicing not supported, loading full split and selecting first {max_samples} rows ({e})")
+                self.dataset = load_dataset(self.config.hf_repo, split=self.config.split, streaming=streaming)
+                self.dataset = self.dataset.select(range(min(max_samples, len(self.dataset))))
+        else:
+            self.dataset = load_dataset(self.config.hf_repo, split=split, streaming=streaming)
 
         # # Add an "image" column to the dataset with PIL Images loaded from the frame paths
 
