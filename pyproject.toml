@@ -85,6 +85,10 @@ members = [
     "android_world"
 ]
 
+[tool.uv]
+# Submodule packages build with setuptools APIs removed in v82+ (pkg_resources)
+build-constraint-dependencies = ["setuptools<82"]
+
 [tool.uv.sources]
 osworld = { workspace = true }
 android_world = { workspace = true }

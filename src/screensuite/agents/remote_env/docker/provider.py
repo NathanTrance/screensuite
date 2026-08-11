@@ -44,10 +44,16 @@ class DockerProviderConfig(BaseModel):
 
 
 class DockerProvider(Provider):
-    client: DockerClient = DockerClient.from_env()
+    _client: DockerClient | None = None
     container: Container | None = None
     config: DockerProviderConfig
     ports: dict[int, int] = {}
+
+    @property
+    def client(self) -> DockerClient:
+        if self._client is None:
+            self._client = DockerClient.from_env()
+        return self._client
 
     @model_validator(mode="after")
     def post_init(self):
