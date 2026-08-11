@@ -37,7 +37,7 @@ RESULTS_DIR = os.path.join(os.path.dirname(__file__), "..", "output")
 os.makedirs(RESULTS_DIR, mode=0o775, exist_ok=True)
 
 
-def launch_test(model, benchmarks, original_evaluation_config):
+def launch_test(model, benchmarks, original_evaluation_config, load_samples):
     evaluation_config = copy.deepcopy(original_evaluation_config)  # NOTE: important!
     if evaluation_config.run_name is None:
         model_name = model.model_id.replace("/", "-")
@@ -70,7 +70,7 @@ def launch_test(model, benchmarks, original_evaluation_config):
         print("=" * 100)
         print(f"Running benchmark: {benchmark.name}")
         try:
-            benchmark.load()
+            benchmark.load(max_samples=load_samples)
             results = benchmark.evaluate(model, evaluation_config)
             print(f"Results for {benchmark.name}: {results}")
             metrics_entry = {"benchmark_name": benchmark.name, "metrics": results._metrics}
@@ -94,6 +94,9 @@ def main():
     parser.add_argument("--max-tokens", type=int, default=4096)
     parser.add_argument("--run-name", type=str, default=None)
     parser.add_argument("--smoke", action="store_true", help="Quick sanity check: 20 samples, 1 worker")
+    parser.add_argument("--load-full", action="store_true",
+                        help="Load the full dataset instead of slicing to the number of samples "
+                             "(matches the blog protocol exactly; much slower first run)")
     parser.add_argument("--no-resize", action="store_true",
                         help="Send images at original resolution (default: Qwen smart-resize, same as the blog run)")
     parser.add_argument("--benchmarks", type=str, nargs="*", default=None,
@@ -111,6 +114,7 @@ def main():
 
     n_samples = 20 if args.smoke else args.n_samples
     workers = 1 if args.smoke else args.workers
+    load_samples = None if args.load_full else n_samples
 
     print(f"Endpoint : {args.api_base}")
     print(f"Model    : {args.model_id}")
@@ -128,15 +132,25 @@ def main():
         temperature=0,
     )
 
-    evaluation_config = EvaluationConfig(
-        test_mode=args.smoke,
-        parallel_workers=workers,
-        max_samples_to_test=n_samples,
-        run_name=args.run_name,
-        image_resize_config=None if args.no_resize else ImageResizeConfig(),
-    )
+    if args.smoke:
+        # test_mode selects `parallel_workers` samples; max_samples_to_test must not be set in test mode
+        evaluation_config = EvaluationConfig(
+            test_mode=True,
+            parallel_workers=20,
+            max_samples_to_test=None,
+            run_name=args.run_name,
+            image_resize_config=None if args.no_resize else ImageResizeConfig(),
+        )
+    else:
+        evaluation_config = EvaluationConfig(
+            test_mode=False,
+            parallel_workers=workers,
+            max_samples_to_test=n_samples,
+            run_name=args.run_name,
+            image_resize_config=None if args.no_resize else ImageResizeConfig(),
+        )
 
-    launch_test(model, benchmarks, evaluation_config)
+    launch_test(model, benchmarks, evaluation_config, load_samples)
 
 
 if __name__ == "__main__":

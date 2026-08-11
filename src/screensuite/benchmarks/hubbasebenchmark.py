@@ -77,9 +77,14 @@ class HubBaseBenchmark(
         )
         return missing / len(responses) if responses else 0.0
 
-    def load(self, streaming: bool = False) -> None:
+    def load(self, streaming: bool = False, max_samples: int | None = None) -> None:
         """
         Load the dataset from the Hugging Face Hub
+
+        Args:
+            streaming: Whether to stream the dataset.
+            max_samples: If set, only load the first `max_samples` rows (split slicing, e.g. "train[:20]").
+                This avoids materializing the full dataset when evaluating a small subset.
         """
         if self.dataset is None and not self.datasets:
             hf_token = os.environ.get("HF_TOKEN")
@@ -96,9 +101,12 @@ class HubBaseBenchmark(
 
             # Handle the case where we have a single data_dir and single split
             if len(data_dirs) == 1 and len(splits) == 1:
+                split = splits[0]
+                if max_samples is not None:
+                    split = f"{split}[:{max_samples}]"
                 self.dataset = load_dataset(
                     self.config.hf_repo,
-                    split=splits[0],
+                    split=split,
                     revision=self.config.revision,
                     data_dir=data_dirs[0],
                     streaming=streaming,
