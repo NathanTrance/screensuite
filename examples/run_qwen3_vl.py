@@ -118,6 +118,8 @@ def main():
 
     n_samples = 20 if args.smoke else args.n_samples
     workers = 1 if args.smoke else args.workers
+    if args.load_full:
+        n_samples = None  # evaluate the entire split
     load_samples = None if args.load_full else n_samples
 
     print(f"Endpoint : {args.api_base}")
