@@ -103,14 +103,34 @@ class HubBaseBenchmark(
             if len(data_dirs) == 1 and len(splits) == 1:
                 split = splits[0]
                 if max_samples is not None:
-                    split = f"{split}[:{max_samples}]"
-                self.dataset = load_dataset(
-                    self.config.hf_repo,
-                    split=split,
-                    revision=self.config.revision,
-                    data_dir=data_dirs[0],
-                    streaming=streaming,
-                )  # type: ignore
+                    try:
+                        # Preferred: slice at the split level (e.g. "test[:20]"), avoids materializing the full dataset
+                        self.dataset = load_dataset(
+                            self.config.hf_repo,
+                            split=f"{split}[:{max_samples}]",
+                            revision=self.config.revision,
+                            data_dir=data_dirs[0],
+                            streaming=streaming,
+                        )  # type: ignore
+                    except Exception as e:
+                        # Fallback for datasets versions that reject split slicing: load the full split, then select
+                        print(f"Split slicing not supported, loading full split and selecting first {max_samples} rows ({e})")
+                        self.dataset = load_dataset(
+                            self.config.hf_repo,
+                            split=split,
+                            revision=self.config.revision,
+                            data_dir=data_dirs[0],
+                            streaming=streaming,
+                        )  # type: ignore
+                        self.dataset = self.dataset.select(range(min(max_samples, len(self.dataset))))
+                else:
+                    self.dataset = load_dataset(
+                        self.config.hf_repo,
+                        split=split,
+                        revision=self.config.revision,
+                        data_dir=data_dirs[0],
+                        streaming=streaming,
+                    )  # type: ignore
             else:
                 # Handle multiple data_dirs and/or splits
                 for data_dir in data_dirs:
