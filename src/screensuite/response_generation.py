@@ -62,7 +62,10 @@ def process_one_input(
         return annotated_input
 
     except Exception as e:
-        logger.error(f"Error processing generator input: {str(e)}", exc_info=True)
+        # Keep per-sample errors concise; full tracebacks at debug level only (otherwise
+        # thousands of failed samples flood the logs and stall the run)
+        logger.error(f"Error processing generator input: {type(e).__name__}: {e}")
+        logger.debug("Traceback for failed input:", exc_info=True)
         return None
 
 
