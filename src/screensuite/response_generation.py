@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 from random import shuffle
 from typing import Any, Callable, Generator, Sequence
@@ -128,6 +128,10 @@ def get_model_responses(
     """
     run_storage_folder = f"./output/{benchmark_name}/{evaluation_config.run_name}"
 
+    # Bounded in-flight window: only `chunk_size` samples are decoded/submitted at once,
+    # otherwise loading a full split (e.g. 8.4k ScreenQA images) exhausts RAM.
+    chunk_size = max(evaluation_config.parallel_workers * 8, 64)
+
     responses: list[AnnotatedContent | None] = []
 
     assert dataset is not None, "Dataset is required"
@@ -144,8 +148,16 @@ def get_model_responses(
     else:
         answers_file_jsonl = None  # Don't write output
 
-    with ThreadPoolExecutor(max_workers=evaluation_config.parallel_workers) as exe:
-        futures = [
+    total_len = len(dataset_to_test)
+    sample_iter = iter(dataset_to_test)
+    submitted: list[Any] = []
+
+    def submit_next():
+        try:
+            sample = next(sample_iter)
+        except StopIteration:
+            return False
+        submitted.append(
             exe.submit(
                 process_sample,
                 sample,
@@ -155,15 +167,26 @@ def get_model_responses(
                 answers_file_jsonl,
                 **generation_kwargs,
             )
-            for sample in dataset_to_test
-        ]
-        total_len = len(dataset_to_test)
-        for f in tqdm(as_completed(futures), total=total_len, desc=f"Processing {benchmark_name}"):
-            try:
-                result = f.result(timeout=evaluation_config.timeout)
-                responses.extend(result)
-            except Exception as e:
-                logger.error(f"Error processing sample: {e}")
-                responses.append(None)
+        )
+        return True
+
+    with ThreadPoolExecutor(max_workers=evaluation_config.parallel_workers) as exe:
+        for _ in range(min(chunk_size, total_len)):
+            submit_next()
+        with tqdm(total=total_len, desc=f"Processing {benchmark_name}") as pbar:
+            while submitted:
+                done, submitted = wait(submitted, return_when=FIRST_COMPLETED)
+                for f in done:
+                    try:
+                        result = f.result(timeout=evaluation_config.timeout)
+                        responses.extend(result)
+                    except Exception as e:
+                        logger.error(f"Error processing sample: {e}")
+                        responses.append(None)
+                    finally:
+                        pbar.update(1)
+                while len(submitted) < chunk_size:
+                    if not submit_next():
+                        break
 
     return responses  # Make sure to return all responses
