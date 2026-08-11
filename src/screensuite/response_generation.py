@@ -40,6 +40,25 @@ def append_answer(entry: dict, jsonl_file_str: str | Path) -> None:
     assert os.path.exists(jsonl_file), "File not found!"
 
 
+def release_images_from_messages(messages) -> None:
+    """Drop pixel data from retained messages, keeping only image dimensions.
+
+    Every generated response is kept in memory for scoring, and each one can hold
+    a multi-MB PIL image (base64/resized). With thousands of samples this exhausts
+    RAM (observed freeze at ~3000 ScreenQA samples). Scoring only needs the image
+    dimensions, so we replace the image with a small {'width', 'height'} dict.
+    """
+    for message in messages:
+        for content in message.get("content", []):
+            if (
+                isinstance(content, dict)
+                and content.get("type") == "image"
+                and hasattr(content.get("image"), "width")
+            ):
+                img = content["image"]
+                content["image"] = {"width": img.width, "height": img.height}
+
+
 def process_one_input(
     annotated_input: AnnotatedContent,
     model: Model,
@@ -59,6 +78,8 @@ def process_one_input(
                 answers_file_path,
             )
         annotated_input.output = model_output
+        # Free the (potentially multi-MB) images before retaining the response for scoring
+        release_images_from_messages(annotated_input.messages)
         return annotated_input
 
     except Exception as e:
