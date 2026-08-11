@@ -38,7 +38,7 @@ RESULTS_DIR = os.path.join(os.path.dirname(__file__), "..", "output")
 os.makedirs(RESULTS_DIR, mode=0o775, exist_ok=True)
 
 
-def launch_test(model, benchmarks, original_evaluation_config, load_samples):
+def launch_test(model, benchmarks, original_evaluation_config, load_samples, download_only=False):
     evaluation_config = copy.deepcopy(original_evaluation_config)  # NOTE: important!
     if evaluation_config.run_name is None:
         model_name = model.model_id.replace("/", "-")
@@ -72,6 +72,9 @@ def launch_test(model, benchmarks, original_evaluation_config, load_samples):
         print(f"Running benchmark: {benchmark.name}")
         try:
             benchmark.load(max_samples=load_samples)
+            if download_only:
+                print(f"[download-only] {benchmark.name}: dataset cached, skipping evaluation")
+                continue
             results = benchmark.evaluate(model, evaluation_config)
             print(f"Results for {benchmark.name}: {results}")
             metrics_entry = {"benchmark_name": benchmark.name, "metrics": results._metrics}
@@ -101,6 +104,8 @@ def main():
     parser.add_argument("--insecure", action="store_true",
                         help="Skip TLS certificate verification for the model endpoint "
                              "(use only on trusted networks / corporate proxies with self-signed certs)")
+    parser.add_argument("--download-only", action="store_true",
+                        help="Only download/cache the datasets, then exit without evaluating")
     parser.add_argument("--no-resize", action="store_true",
                         help="Send images at original resolution (default: Qwen smart-resize, same as the blog run)")
     parser.add_argument("--benchmarks", type=str, nargs="*", default=None,
@@ -167,7 +172,7 @@ def main():
             image_resize_config=None if args.no_resize else ImageResizeConfig(),
         )
 
-    launch_test(model, benchmarks, evaluation_config, load_samples)
+    launch_test(model, benchmarks, evaluation_config, load_samples, download_only=args.download_only)
 
 
 if __name__ == "__main__":
