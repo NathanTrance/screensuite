@@ -12,7 +12,11 @@ import numpy as np
 # Qwen2.5VL imports
 # E2B imports
 from PIL import Image
-from smolagents import HfApiModel, Model, Tool, tool
+try:
+    from smolagents import HfApiModel, Model, Tool, tool
+except ImportError:
+    from smolagents import InferenceClientModel as HfApiModel
+    from smolagents import Model, Tool, tool
 from smolagents.monitoring import LogLevel
 
 from screensuite.agents.client.desktop_env_client import (

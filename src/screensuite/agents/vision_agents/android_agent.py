@@ -11,7 +11,11 @@ import numpy as np
 # E2B imports
 
 # SmolaAgents imports
-from smolagents import HfApiModel, Model, Tool, tool
+try:
+    from smolagents import HfApiModel, Model, Tool, tool
+except ImportError:
+    from smolagents import InferenceClientModel as HfApiModel
+    from smolagents import Model, Tool, tool
 from smolagents.monitoring import LogLevel
 
 

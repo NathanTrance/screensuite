@@ -10,7 +10,11 @@ from e2b_desktop import Sandbox
 from PIL import Image, ImageDraw
 
 # SmolaAgents imports
-from smolagents import HfApiModel, Model, Tool, tool
+try:
+    from smolagents import HfApiModel, Model, Tool, tool
+except ImportError:
+    from smolagents import InferenceClientModel as HfApiModel
+    from smolagents import Model, Tool, tool
 from smolagents.monitoring import LogLevel
 
 from screensuite.agents.prompt import E2B_SYSTEM_PROMPT_TEMPLATE
