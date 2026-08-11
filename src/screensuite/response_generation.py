@@ -175,7 +175,8 @@ def get_model_responses(
             submit_next()
         with tqdm(total=total_len, desc=f"Processing {benchmark_name}") as pbar:
             while submitted:
-                done, submitted = wait(submitted, return_when=FIRST_COMPLETED)
+                done, remaining = wait(submitted, return_when=FIRST_COMPLETED)
+                submitted = list(remaining)
                 for f in done:
                     try:
                         result = f.result(timeout=evaluation_config.timeout)
