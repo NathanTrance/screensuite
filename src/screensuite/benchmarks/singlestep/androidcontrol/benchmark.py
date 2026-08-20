@@ -120,26 +120,15 @@ class AndroidControlBenchmark(HubBaseBenchmark[AndroidControlConfig, None]):
             return
         # NOTE: the repo layout is flat (data/test-*.parquet, data/train-*.parquet), no per-task
         # data_dir subfolders, so config.data_dir (legacy task list) must NOT be passed here.
-        split = self.config.split
+        #
+        # ALWAYS stream: a non-streaming load can, depending on the datasets version/cache,
+        # pull EVERY shard of EVERY split (train is 54 GB / 275 files here). Streaming reads
+        # only the requested split's shards, lazily, as rows are consumed.
+        streamed = load_dataset(self.config.hf_repo, split=self.config.split, streaming=True)  # type: ignore
         if max_samples is not None:
-            try:
-                # Cheap slice: stream lazily, materialize only the first N rows.
-                # A non-streaming slice downloads every shard of the split (13 GB test / 54 GB train).
-                streamed = load_dataset(self.config.hf_repo, split=split, streaming=True)  # type: ignore
-                self.dataset = [row for _, row in zip(range(max_samples), streamed)]
-                return
-            except Exception as e:
-                print(f"Streaming slice not supported, falling back to split slicing ({e})")
-                try:
-                    self.dataset = load_dataset(  # type: ignore
-                        self.config.hf_repo, split=f"{split}[:{max_samples}]", streaming=streaming
-                    )
-                    return
-                except Exception as e2:
-                    print(f"Split slicing not supported, loading full split and selecting first {max_samples} rows ({e2})")
-        self.dataset = load_dataset(self.config.hf_repo, split=split, streaming=streaming)  # type: ignore
-        if max_samples is not None:
-            self.dataset = self.dataset.select(range(min(max_samples, len(self.dataset))))
+            self.dataset = [row for _, row in zip(range(max_samples), streamed)]
+        else:
+            self.dataset = list(streamed)
 
     def _get_annotated_input_from_sample(
         self, sample_dict: dict[str, list[Any] | str], evaluation_config: EvaluationConfig
