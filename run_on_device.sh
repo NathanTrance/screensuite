@@ -52,12 +52,25 @@ ensure_forward() {
   fi
 }
 
-# Background watchdog: keep the forward alive for the whole (possibly multi-hour) run.
+# Background watchdog: keep the forward alive and recover a stale adb/USB transport.
+# A wedged USB/adb tunnel makes in-flight requests hang forever even though the phone
+# is fine (the "freeze" you fixed by unplugging). Probe the endpoint; if it stops
+# responding, bounce the adb server (software equivalent of unplugging) and re-forward.
 watch_forward() {
   while true; do
-    sleep 20
+    sleep 15
     if ! adb forward --list 2>/dev/null | grep -q "tcp:18181"; then
-      echo ">>> [watchdog] forward dropped, re-adding..."
+      echo ">>> [watchdog] adb forward missing, re-adding..."
+      adb forward tcp:18181 tcp:18181 2>/dev/null || true
+      continue
+    fi
+    # Server should answer /v1/models quickly when healthy; a stale tunnel hangs it
+    if ! curl -s -m 5 -o /dev/null http://localhost:18181/v1/models; then
+      echo ">>> [watchdog] endpoint unresponsive, bouncing adb (auto-recovery)..."
+      adb kill-server 2>/dev/null || true
+      sleep 3
+      adb start-server 2>/dev/null || true
+      sleep 3
       adb forward tcp:18181 tcp:18181 2>/dev/null || true
     fi
   done
