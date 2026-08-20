@@ -43,6 +43,37 @@ forward() {
   adb forward --list
 }
 
+# Re-establish the adb forward if it has dropped (adb server restarts / USB hiccups
+# clear forwards, which manifests as APIConnectionError even though the phone is fine).
+ensure_forward() {
+  if ! adb forward --list 2>/dev/null | grep -q "tcp:18181"; then
+    echo ">>> adb forward missing, re-adding..."
+    forward
+  fi
+}
+
+# Background watchdog: keep the forward alive for the whole (possibly multi-hour) run.
+watch_forward() {
+  while true; do
+    sleep 20
+    if ! adb forward --list 2>/dev/null | grep -q "tcp:18181"; then
+      echo ">>> [watchdog] forward dropped, re-adding..."
+      adb forward tcp:18181 tcp:18181 2>/dev/null || true
+    fi
+  done
+}
+
+start_watchdog() {
+  watch_forward &
+  WATCH_PID=$!
+  trap 'kill "$WATCH_PID" 2>/dev/null || true' EXIT
+}
+
+stop_watchdog() {
+  kill "$WATCH_PID" 2>/dev/null || true
+  trap - EXIT
+}
+
 smoke() {
   forward
   $PY --api-base "$API" --api-key "$API_KEY" --model-id "$MODEL" \
@@ -51,16 +82,20 @@ smoke() {
 
 run() {
   forward
+  start_watchdog
   # shellcheck disable=SC2086
   $PY --api-base "$API" --api-key "$API_KEY" --model-id "$MODEL" \
       --n-samples "$SAMPLES" --workers 1 --run-name "$RUN_NAME" --benchmarks $BENCHS
+  stop_watchdog
 }
 
 full() {
   forward
+  start_watchdog
   # shellcheck disable=SC2086
   $PY --api-base "$API" --api-key "$API_KEY" --model-id "$MODEL" \
       --load-full --workers 1 --run-name "$RUN_NAME" --benchmarks $BENCHS
+  stop_watchdog
 }
 
 results() {

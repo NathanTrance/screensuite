@@ -137,9 +137,13 @@ def main():
         max_tokens=args.max_tokens,
         temperature=0,
     )
+    # More retries: on-device / flaky endpoints intermittently drop connections;
+    # the default 2 retries is too few for multi-hour runs.
+    client_kwargs: dict = {"max_retries": 10}
     if args.insecure:
         print("WARNING: skipping TLS certificate verification for the model endpoint")
-        model_kwargs["client_kwargs"] = {"http_client": httpx.Client(verify=False)}
+        client_kwargs["http_client"] = httpx.Client(verify=False)
+    model_kwargs["client_kwargs"] = client_kwargs
     try:
         model = SERVER_MODEL_CLS(**model_kwargs)
     except TypeError:
