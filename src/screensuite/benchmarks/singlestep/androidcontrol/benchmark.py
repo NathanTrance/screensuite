@@ -32,7 +32,7 @@ from screensuite.chat_message import (
     dump_chat_message_list,
     get_last_image_dimension,
 )
-from screensuite.response_generation import AnnotatedContent, get_model_responses
+from screensuite.response_generation import AnnotatedContent, average_latency, get_model_responses
 
 logger = logging.getLogger(__name__)
 
@@ -116,15 +116,27 @@ def convert_android_control_operation(operation_dict: dict[str, Any]) -> Operati
 
 class AndroidControlBenchmark(HubBaseBenchmark[AndroidControlConfig, None]):
     def load(self, streaming: bool = False, max_samples: int | None = None) -> None:
+        if self.dataset is not None:
+            return
+        # NOTE: the repo layout is flat (data/test-*.parquet, data/train-*.parquet), no per-task
+        # data_dir subfolders, so config.data_dir (legacy task list) must NOT be passed here.
         split = self.config.split
         if max_samples is not None:
             try:
-                self.dataset = load_dataset(  # type: ignore
-                    self.config.hf_repo, split=f"{split}[:{max_samples}]", streaming=streaming
-                )
+                # Cheap slice: stream lazily, materialize only the first N rows.
+                # A non-streaming slice downloads every shard of the split (13 GB test / 54 GB train).
+                streamed = load_dataset(self.config.hf_repo, split=split, streaming=True)  # type: ignore
+                self.dataset = [row for _, row in zip(range(max_samples), streamed)]
                 return
             except Exception as e:
-                print(f"Split slicing not supported, loading full split and selecting first {max_samples} rows ({e})")
+                print(f"Streaming slice not supported, falling back to split slicing ({e})")
+                try:
+                    self.dataset = load_dataset(  # type: ignore
+                        self.config.hf_repo, split=f"{split}[:{max_samples}]", streaming=streaming
+                    )
+                    return
+                except Exception as e2:
+                    print(f"Split slicing not supported, loading full split and selecting first {max_samples} rows ({e2})")
         self.dataset = load_dataset(self.config.hf_repo, split=split, streaming=streaming)  # type: ignore
         if max_samples is not None:
             self.dataset = self.dataset.select(range(min(max_samples, len(self.dataset))))
@@ -273,7 +285,7 @@ class AndroidControlBenchmark(HubBaseBenchmark[AndroidControlConfig, None]):
         Returns:
             Evaluation results
         """
-        if not self.datasets:
+        if self.dataset is None and not self.datasets:
             self.load(streaming=False)
 
         accuracy_scores: list[float] = []
@@ -301,6 +313,9 @@ class AndroidControlBenchmark(HubBaseBenchmark[AndroidControlConfig, None]):
         reference_field = "action_acc"
         metrics["proportion_missing"] = self._calculate_proportion_missing(responses)
         metrics["count_samples"] = len(responses)
+        avg_latency = average_latency(responses)
+        if avg_latency is not None:
+            metrics["avg_latency_s"] = float(avg_latency)
         return BenchmarkResult(metrics=metrics, reference_field=reference_field)
 
 

@@ -17,7 +17,7 @@ from screensuite.chat_message import (
     TextContent,
     dump_chat_message_list,
 )
-from screensuite.response_generation import get_model_responses
+from screensuite.response_generation import average_latency, get_model_responses
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +100,9 @@ class ScreenQABenchmark(HubBaseBenchmark[ScreenQaConfig, None]):
             "f1_confidence_interval_lower": float(lower),
             "f1_confidence_interval_upper": float(upper),
         }
+        avg_latency = average_latency(responses)
+        if avg_latency is not None:
+            results_dict["avg_latency_s"] = float(avg_latency)
 
         return BenchmarkResult(results_dict, "f1")
 

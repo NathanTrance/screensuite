@@ -187,4 +187,5 @@ build/
 uv.lock
 
 examples/output/
+output/
 **/android_world/output/

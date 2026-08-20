@@ -28,6 +28,8 @@ class AnnotatedContent(BaseModel, Generic[T_GroundTruthType]):
     ground_truth: T_GroundTruthType
     last_img_original_dimensions: ImageDimensions | None
     output: str | None = None
+    latency: float | None = None
+    """Wall-clock time of the model call for this sample, in seconds (None if the call failed)."""
 
 
 class EvaluationConfig(BaseModel):

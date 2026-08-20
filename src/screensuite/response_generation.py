@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import threading
+import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 from random import shuffle
@@ -59,6 +60,12 @@ def release_images_from_messages(messages) -> None:
                 content["image"] = {"width": img.width, "height": img.height}
 
 
+def average_latency(responses: Sequence[AnnotatedContent | None]) -> float | None:
+    """Average per-call latency (s) over successful samples, or None if none succeeded."""
+    latencies = [r.latency for r in responses if r is not None and r.latency is not None]
+    return float(sum(latencies) / len(latencies)) if latencies else None
+
+
 def process_one_input(
     annotated_input: AnnotatedContent,
     model: Model,
@@ -66,7 +73,9 @@ def process_one_input(
     **generation_kwargs,
 ) -> AnnotatedContent | None:
     try:
+        t0 = time.monotonic()
         model_output = model.generate(annotated_input.messages, **generation_kwargs).content
+        annotated_input.latency = time.monotonic() - t0
         logger.debug(f"Generated output: {model_output}")
         if answers_file_path is not None:
             append_answer(
@@ -74,6 +83,7 @@ def process_one_input(
                     "input": annotated_input.messages,
                     "answer": model_output,
                     "ground_truth": annotated_input.ground_truth,
+                    "latency": annotated_input.latency,
                 },
                 answers_file_path,
             )
