@@ -161,6 +161,19 @@ def get_registry() -> BenchmarkRegistry:
         tags=["screenqa", "hf_dataset", "webqa", "complex", "mobile", "to_evaluate"],
     )
 
+    # 500-sample fast subsets (pushed to nathantrance/*) - select explicitly with --benchmarks
+    screenqa_short_500 = ScreenQABenchmark(
+        name="screenqa_short_500",
+        config=ScreenQaConfig.short_500(),
+        tags=["screenqa", "hf_dataset", "webqa", "short", "mobile", "small"],
+    )
+
+    screenqa_complex_500 = ScreenQABenchmark(
+        name="screenqa_complex_500",
+        config=ScreenQaConfig.complex_500(),
+        tags=["screenqa", "hf_dataset", "webqa", "complex", "mobile", "small"],
+    )
+
     # WebSrc Benchmark
     websrc_dev = WebSrcBenchmark(
         name="websrc_dev",
@@ -228,6 +241,7 @@ def get_registry() -> BenchmarkRegistry:
 
     # Register all perception benchmarks
     registry.register([screenqa_short, screenqa_complex])
+    registry.register([screenqa_short_500, screenqa_complex_500])
     registry.register(websrc_dev)
     registry.register(
         [

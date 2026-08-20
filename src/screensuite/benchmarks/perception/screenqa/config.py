@@ -28,7 +28,7 @@ class ScreenQaConfig(HubBaseBenchmarkConfig):
 
     revision: str = "main"
 
-    split: Literal["test"] = "test"
+    split: Literal["train", "test"] = "test"
     """HF split name"""
 
     system_prompt: ScreenQaPrompt
@@ -56,4 +56,24 @@ class ScreenQaConfig(HubBaseBenchmarkConfig):
             hf_repo=ScreenQAHFRepo.COMPLEX,
             dataset_version=ScreenQaDatasetVersion.COMPLEX,
             system_prompt=ScreenQaPrompt.SHORT_PROMPT,
+        )
+
+    @classmethod
+    def short_500(cls) -> "ScreenQaConfig":
+        """Create a config for the 500-sample ScreenQA-Short test subset (nathantrance/screenqa-short-500)."""
+        return cls(
+            hf_repo="nathantrance/screenqa-short-500",
+            dataset_version=ScreenQaDatasetVersion.SHORT,
+            system_prompt=ScreenQaPrompt.SHORT_PROMPT,
+            split="train",
+        )
+
+    @classmethod
+    def complex_500(cls) -> "ScreenQaConfig":
+        """Create a config for the 500-sample ScreenQA-Complex test subset (nathantrance/screenqa-complex-500)."""
+        return cls(
+            hf_repo="nathantrance/screenqa-complex-500",
+            dataset_version=ScreenQaDatasetVersion.COMPLEX,
+            system_prompt=ScreenQaPrompt.SHORT_PROMPT,
+            split="train",
         )
