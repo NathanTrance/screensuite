@@ -1,5 +1,8 @@
 from .basebenchmark import BaseBenchmark, EvaluationConfig, ImageResizeConfig
-from .benchmarks.multistep.osworld.config import OSWorldEnvironmentConfig
+try:
+    from .benchmarks.multistep.osworld.config import OSWorldEnvironmentConfig
+except ImportError:  # osworld submodule not installed
+    OSWorldEnvironmentConfig = None
 from .registry import BenchmarkRegistry
 from .registry_builder import get_registry
 from .response_generation import get_model_responses

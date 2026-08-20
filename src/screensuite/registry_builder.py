@@ -5,18 +5,40 @@ This file contains all benchmark instantiations collected from individual benchm
 All benchmarks are instantiated here with their original constructor calls and then registered.
 """
 
-from screensuite.benchmarks.multistep.android_world.benchmark import (
-    AndroidWorldBenchmark,
-)
-from screensuite.benchmarks.multistep.android_world.config import AndroidWorldConfig
-from screensuite.benchmarks.multistep.browse_comp.benchmark import BrowseCompBenchmark
-from screensuite.benchmarks.multistep.browse_comp.config import BrowseCompConfig
-from screensuite.benchmarks.multistep.gaia.benchmark import GaiaBenchmark
-from screensuite.benchmarks.multistep.gaia.config import GaiaConfig
-from screensuite.benchmarks.multistep.mind2web.benchmark import Mind2WebBenchmark
-from screensuite.benchmarks.multistep.mind2web.config import Mind2WebConfig
-from screensuite.benchmarks.multistep.osworld.benchmark import OSWorldBenchmark
-from screensuite.benchmarks.multistep.osworld.config import OSWorldConfig
+# Multistep benchmarks require the optional `osworld` / `android_world` packages (and Docker/KVM).
+# They are imported lazily so that offline-only installs (without those submodules) still work.
+try:
+    from screensuite.benchmarks.multistep.android_world.benchmark import (
+        AndroidWorldBenchmark,
+    )
+    from screensuite.benchmarks.multistep.android_world.config import AndroidWorldConfig
+except ImportError:
+    AndroidWorldBenchmark = None
+    AndroidWorldConfig = None
+try:
+    from screensuite.benchmarks.multistep.browse_comp.benchmark import BrowseCompBenchmark
+    from screensuite.benchmarks.multistep.browse_comp.config import BrowseCompConfig
+except ImportError:
+    BrowseCompBenchmark = None
+    BrowseCompConfig = None
+try:
+    from screensuite.benchmarks.multistep.gaia.benchmark import GaiaBenchmark
+    from screensuite.benchmarks.multistep.gaia.config import GaiaConfig
+except ImportError:
+    GaiaBenchmark = None
+    GaiaConfig = None
+try:
+    from screensuite.benchmarks.multistep.mind2web.benchmark import Mind2WebBenchmark
+    from screensuite.benchmarks.multistep.mind2web.config import Mind2WebConfig
+except ImportError:
+    Mind2WebBenchmark = None
+    Mind2WebConfig = None
+try:
+    from screensuite.benchmarks.multistep.osworld.benchmark import OSWorldBenchmark
+    from screensuite.benchmarks.multistep.osworld.config import OSWorldConfig
+except ImportError:
+    OSWorldBenchmark = None
+    OSWorldConfig = None
 from screensuite.benchmarks.perception.screenqa.benchmark import ScreenQABenchmark
 from screensuite.benchmarks.perception.screenqa.config import ScreenQaConfig
 from screensuite.benchmarks.perception.screenspot.benchmark import ScreenSpotBenchmark
@@ -53,39 +75,49 @@ def get_registry() -> BenchmarkRegistry:
     # =============================================================================
 
     # GAIA Benchmark
-    gaia_web = GaiaBenchmark(
-        name="gaia_web",
-        config=GaiaConfig(),
-        tags=["gaia", "multistep", "hf_dataset", "web", "online", "to_evaluate"],
-    )
+    gaia_web = None
+    if GaiaBenchmark is not None:
+        gaia_web = GaiaBenchmark(
+            name="gaia_web",
+            config=GaiaConfig(),
+            tags=["gaia", "multistep", "hf_dataset", "web", "online", "to_evaluate"],
+        )
 
     # Mind2Web Benchmark
-    mind2web_live = Mind2WebBenchmark(
-        name="mind2web_live",
-        config=Mind2WebConfig(),
-        tags=["mind2web", "multistep", "hf_dataset", "web", "online", "to_evaluate"],
-    )
+    mind2web_live = None
+    if Mind2WebBenchmark is not None:
+        mind2web_live = Mind2WebBenchmark(
+            name="mind2web_live",
+            config=Mind2WebConfig(),
+            tags=["mind2web", "multistep", "hf_dataset", "web", "online", "to_evaluate"],
+        )
 
     # Browse Comp Benchmark
-    browse_comp = BrowseCompBenchmark(
-        name="browse_comp",
-        config=BrowseCompConfig(),
-        tags=["browse_comp", "multistep", "hf_dataset", "web", "online", "to_evaluate"],
-    )
+    browse_comp = None
+    if BrowseCompBenchmark is not None:
+        browse_comp = BrowseCompBenchmark(
+            name="browse_comp",
+            config=BrowseCompConfig(),
+            tags=["browse_comp", "multistep", "hf_dataset", "web", "online", "to_evaluate"],
+        )
 
     # OSWorld Benchmark
-    osworld_benchmark = OSWorldBenchmark(
-        name="osworld",
-        config=OSWorldConfig(),
-        tags=["osworld", "multistep", "online", "os", "web", "to_evaluate"],
-    )
+    osworld_benchmark = None
+    if OSWorldBenchmark is not None:
+        osworld_benchmark = OSWorldBenchmark(
+            name="osworld",
+            config=OSWorldConfig(),
+            tags=["osworld", "multistep", "online", "os", "web", "to_evaluate"],
+        )
 
     # Android World Benchmark
-    android_world = AndroidWorldBenchmark(
-        name="android_world",
-        config=AndroidWorldConfig(),
-        tags=["android_world", "multistep", "hf_dataset", "online", "mobile", "android", "to_evaluate"],
-    )
+    android_world = None
+    if AndroidWorldBenchmark is not None:
+        android_world = AndroidWorldBenchmark(
+            name="android_world",
+            config=AndroidWorldConfig(),
+            tags=["android_world", "multistep", "hf_dataset", "online", "mobile", "android", "to_evaluate"],
+        )
 
     # =============================================================================
     # SINGLESTEP BENCHMARKS
@@ -184,12 +216,10 @@ def get_registry() -> BenchmarkRegistry:
     # REGISTRY REGISTRATION
     # =============================================================================
 
-    # Register all multistep benchmarks
-    registry.register(gaia_web)
-    registry.register(mind2web_live)
-    registry.register(browse_comp)
-    registry.register(osworld_benchmark)
-    registry.register(android_world)
+    # Register all multistep benchmarks (only those whose optional packages are installed)
+    for b in (gaia_web, mind2web_live, browse_comp, osworld_benchmark, android_world):
+        if b is not None:
+            registry.register(b)
 
     # Register all singlestep benchmarks
     registry.register(mmind2web)
