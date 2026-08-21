@@ -98,6 +98,10 @@ def main():
     parser.add_argument("--load-full", action="store_true",
                         help="Load the full dataset instead of slicing to the number of samples "
                              "(matches the blog protocol exactly; much slower first run)")
+    parser.add_argument("--max-retries", type=int, default=2,
+                        help="Max retries for API calls (default: 2)")
+    parser.add_argument("--api-timeout", type=float, default=60.0,
+                        help="API request timeout in seconds (default: 60)")
     parser.add_argument("--insecure", action="store_true",
                         help="Skip TLS certificate verification for the model endpoint "
                              "(use only on trusted networks / corporate proxies with self-signed certs)")
@@ -138,8 +142,9 @@ def main():
         temperature=0,
     )
     # More retries: on-device / flaky endpoints intermittently drop connections;
-    # the default 2 retries is too few for multi-hour runs.
-    client_kwargs: dict = {"max_retries": 10}
+    client_kwargs: dict = {"max_retries": args.max_retries}
+    if args.api_timeout:
+        client_kwargs["timeout"] = args.api_timeout
     if args.insecure:
         print("WARNING: skipping TLS certificate verification for the model endpoint")
         client_kwargs["http_client"] = httpx.Client(verify=False)

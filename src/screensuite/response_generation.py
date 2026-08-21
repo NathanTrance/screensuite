@@ -97,6 +97,18 @@ def process_one_input(
         # thousands of failed samples flood the logs and stall the run)
         logger.error(f"Error processing generator input: {type(e).__name__}: {e}")
         logger.debug("Traceback for failed input:", exc_info=True)
+        # Write failed sample to answers.jsonl for debugging
+        if answers_file_path is not None:
+            append_answer(
+                {
+                    "input": annotated_input.messages,
+                    "answer": None,
+                    "ground_truth": annotated_input.ground_truth,
+                    "latency": None,
+                    "error": f"{type(e).__name__}: {e}",
+                },
+                answers_file_path,
+            )
         return None
 
 
