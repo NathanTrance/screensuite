@@ -96,10 +96,26 @@ def main():
     parser.add_argument("--from-index", type=int, default=0, help="Skip to sample index")
     parser.add_argument("--sample-index", type=int, default=None,
                         help="Run only this single sample index (same ordering as the benchmark uses)")
+    parser.add_argument("--sample-id", type=str, default=None,
+                        help="Run only the sample with this screen_id/episode_id/file_name")
     args = parser.parse_args()
 
     registry = get_registry()
     bench = next(b for b in registry.list_all() if b.name == args.benchmark)
+
+    if args.sample_id is not None:
+        from datasets import load_dataset
+        print(f"# locating sample_id {args.sample_id} in {bench.config.hf_repo} ({bench.config.split})...")
+        stream = load_dataset(bench.config.hf_repo, split=bench.config.split, streaming=True)
+        for i, row in enumerate(stream):
+            sid = row.get("screen_id", row.get("episode_id", row.get("file_name")))
+            if str(sid) == str(args.sample_id):
+                print(f"# found at index {i}")
+                args.sample_index = i
+                break
+        else:
+            raise SystemExit(f"sample_id {args.sample_id} not found in {bench.config.hf_repo}")
+
     n_load = args.n
     if args.sample_index is not None:
         n_load = max(args.n, args.sample_index + 1)
