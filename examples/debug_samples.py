@@ -80,6 +80,56 @@ def extract_metadata(messages: list[dict]) -> dict:
     }
 
 
+def call_server(api_base: str, model_id: str, messages: list[dict], max_tokens: int, timeout: float):
+    """POST a chat completion directly (same serialization the OpenAI client uses:
+    PIL images -> base64 PNG data URL) and return (ok, error, latency, response_json).
+    Captures the server's `timings` field for per-request profiling."""
+    import base64
+    import io
+
+    serialized = []
+    for msg in messages:
+        content = []
+        for part in msg.get("content", []):
+            if part.get("type") == "text":
+                content.append({"type": "text", "text": part.get("text", "")})
+            elif part.get("type") == "image":
+                img = part.get("image")
+                buf = io.BytesIO()
+                img.save(buf, "PNG")
+                content.append({
+                    "type": "image_url",
+                    "image_url": {"url": "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()},
+                })
+        serialized.append({"role": msg["role"], "content": content})
+
+    payload = {
+        "model": model_id,
+        "max_tokens": max_tokens,
+        "temperature": 0,
+        "stream": False,
+        "messages": serialized,
+    }
+    t0 = time.monotonic()
+    try:
+        r = httpx.post(f"{api_base}/chat/completions", json=payload, timeout=timeout)
+        latency = round(time.monotonic() - t0, 2)
+        if r.status_code == 200:
+            return True, None, latency, r.json()
+        return False, f"HTTP {r.status_code}: {r.text[:200]}", latency, None
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}", round(time.monotonic() - t0, 2), None
+
+
+def extract_timings(resp) -> dict:
+    if not resp:
+        return {}
+    t = resp.get("timings", {})
+    keys = ("reset_ms", "template_ms", "media_inject_ms", "ttft_ms", "prompt_time_ms",
+            "decode_time_ms", "prefill_tok_per_sec", "decode_tok_per_sec", "stop_reason")
+    return {k: t.get(k) for k in keys if k in t}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--benchmark", default="screenqa_short_500")
@@ -163,16 +213,11 @@ def main():
 
         for step_idx, annotated_input in enumerate(steps):
             meta = extract_metadata(annotated_input.messages)
-            t0 = time.monotonic()
-            ok = True
-            error = None
-            try:
-                model.generate(annotated_input.messages)
-            except Exception as e:
-                ok = False
-                error = f"{type(e).__name__}: {e}"
-            latency = round(time.monotonic() - t0, 2)
-
+            ok, error, latency, resp = call_server(
+                args.api_base, args.model_id, annotated_input.messages,
+                args.max_tokens, args.api_timeout,
+            )
+            timings = extract_timings(resp)
             alive, ping_t = ping_server(args.api_base)
             record = {
                 "ts": datetime.now().isoformat(),
@@ -184,6 +229,7 @@ def main():
                 "error": error,
                 "server_alive_after": alive,
                 **meta,
+                **timings,
             }
             logf.write(json.dumps(record, default=str) + "\n")
             logf.flush()
