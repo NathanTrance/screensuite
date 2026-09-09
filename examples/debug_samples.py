@@ -94,16 +94,21 @@ def main():
                         help="Max seconds to wait for the server to recover before giving up")
     parser.add_argument("--out", default="output/debug_samples.jsonl")
     parser.add_argument("--from-index", type=int, default=0, help="Skip to sample index")
+    parser.add_argument("--sample-index", type=int, default=None,
+                        help="Run only this single sample index (same ordering as the benchmark uses)")
     args = parser.parse_args()
 
     registry = get_registry()
     bench = next(b for b in registry.list_all() if b.name == args.benchmark)
-    bench.load(max_samples=args.n)
+    n_load = args.n
+    if args.sample_index is not None:
+        n_load = max(args.n, args.sample_index + 1)
+    bench.load(max_samples=n_load)
 
     evaluation_config = EvaluationConfig(
         test_mode=False,
         parallel_workers=1,
-        max_samples_to_test=args.n,
+        max_samples_to_test=None if args.sample_index is not None else args.n,
         run_name=None,
         image_resize_config=ImageResizeConfig(),
     )
@@ -125,6 +130,8 @@ def main():
     crash_candidates: list[dict] = []
     for sample_idx, sample in enumerate(samples):
         if sample_idx < args.from_index:
+            continue
+        if args.sample_index is not None and sample_idx != args.sample_index:
             continue
         sample_id = None
         for key in ("screen_id", "file_name", "episode_id"):
