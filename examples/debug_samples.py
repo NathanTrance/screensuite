@@ -88,7 +88,7 @@ def main():
     parser.add_argument("--api-key", default="EMPTY")
     parser.add_argument("--model-id", default="Qwen3-VL-4B-Instruct-V79")
     parser.add_argument("--max-tokens", type=int, default=4096)
-    parser.add_argument("--api-timeout", type=float, default=60.0)
+    parser.add_argument("--api-timeout", type=float, default=5.0)
     parser.add_argument("--ping-interval", type=float, default=2.0)
     parser.add_argument("--max-recovery-wait", type=float, default=600.0,
                         help="Max seconds to wait for the server to recover before giving up")
