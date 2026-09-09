@@ -1,24 +1,30 @@
-# Bug Report: Silent NPU (HTP/CDSP) hang on sample 18777 (ScreenQA-Complex)
+# Bug Report: Silent NPU (HTP/CDSP) hang on ScreenQA-Complex samples 18777 & 5362
 
 **Status:** Open — needs QAIRT/Qualcomm-side investigation
-**Report date:** 2026-09-09
+**Report date:** 2026-09-09 (updated with second trigger + cascade analysis)
 **Reported by:** nhatth (testing)
 
 ---
 
 ## Summary
 
-A single ScreenQA-Complex sample (`screen_id=18777`) deterministically hangs the
-on-device VLM server: the request never completes, no token is ever generated,
-the inference mutex is held forever (all subsequent requests get `503 model busy`),
-and after enough blocked workers the whole HTTP layer stops responding
-(including `GET /v1/models`) until the app is restarted.
+Two ScreenQA-Complex samples (`screen_id=18777`, `screen_id=5362`) deterministically
+hang the on-device VLM server: the request never completes, no token is ever
+generated, the inference mutex is held forever (all subsequent requests get
+`503 model busy`), and after enough blocked workers the whole HTTP layer stops
+responding (including `GET /v1/models`) until the app is restarted.
 
 The hang is a **silent HTP (Hexagon Tensor Processor) graph-execution hang on the
 CDSP**: no crash, no error code, no SDK timeout — the native `geniex_vlm_generate`
-call simply never returns. It is triggered by this specific image combined with a
-text prompt longer than ~300 characters. It is a regression: the exact same
+call simply never returns. Each trigger is a specific image combined with a text
+prompt longer than ~300 characters. It is a regression: the exact same
 request completed in 2.8 s on 2026-09-08 and hangs on 2026-09-09 (V79 build).
+
+**Working hypothesis for the mechanism:** a value (pixel statistics / attention
+scale / position encoding) going out of the HTP's fixed-point range for these
+inputs produces NaN/denormal propagation, and the DSP graph never terminates
+instead of failing — consistent with: no fault, no error return, 0% app CPU,
+clean dmesg, DSP remoteproc still "running".
 
 ---
 
@@ -141,6 +147,56 @@ Conclusions:
 
 ---
 
+## Second trigger + full-run cascade analysis (500-sample debug run)
+
+`output/debug_samples.jsonl` (screenqa_complex_500, workers=1, `--api-timeout 60`):
+
+### Bursts
+
+| Burst | Trigger idx | Trigger id | Trigger latency | Follow-on failures |
+|---|---|---|---|---|
+| 1 | 335 | **18777** | 62.6 s (client timeout; request stuck server-side) | 336-376 (41 instant 503s, 0.4-0.8 s each) |
+| 2 | 392 | **5362** | 62.5 s (same) | 393-433 (41 instant 503s) |
+
+All 84 failures are `503 model busy`. Only the two burst-first samples are real
+triggers; the other 82 are cascade victims (their content is fine — verified by
+the 14 other "how many more" questions that passed, incl. `42238`, `12163`,
+`7630`...).
+
+Timing: trigger stuck for ~62 s (client) + 41 × ~0.7 s ≈ 29 s of busy-rejections
+≈ **~90 s total stuck duration** before the lock was released — i.e. the hung
+request self-terminated after ~90 s in this run (but hung >300 s in later
+isolated repros — duration varies with server state).
+
+### Trigger sample contents
+
+| | 18777 | 5362 |
+|---|---|---|
+| Question | "How many more people are available for the top 1000 subscription than the top 100?" | "How many more folders are there than albums?" |
+| Ground truth | `982` | `4` |
+| Prompt length | 406 chars | 368 chars |
+| Raw image | 540×960 | 1080×1920 |
+| Resized (sent) | 532×952 | 1092×1932 |
+| PNG / base64 | 350 KB / 466 KB | 463 KB / 618 KB |
+| Mean brightness (0-255) | 219.6 (rank 472/500, z=+1.0) | **26.8 (rank 9/500, z=-1.9 — darkest decile)** |
+| Edge density (>30 diff) | **8.5% (rank 494/500, z=+3.3 — 2nd most detailed in the set)** | 2.1% (median) |
+
+Both questions are the same type ("how many more X than Y" — counting +
+subtraction). 14 other same-type questions passed, so the question alone is not
+the trigger. Image stats: 18777 is an extreme outlier in content density;
+5362 is an extreme outlier in darkness (both directions of "out-of-range"
+inputs — consistent with the NaN/out-of-range mechanism hypothesis).
+
+### What does NOT correlate
+
+- Text length alone (non-triggers span 345-448 chars, triggers 368/406)
+- Question type (see above)
+- Payload bytes (largest payload in the run = 2962 KB, passed)
+- Image size class (both 532×952 and 1092×1932 classes contain passing samples)
+- Token count (all samples ≈ 256 image + 60-120 text tokens)
+
+---
+
 ## Bundle facts relevant to the hang (read from the device)
 
 From `/storage/emulated/0/Download/Qwen3-VL-4B-Instruct-V79/`:
@@ -167,6 +223,13 @@ an edge case, there is no fallback.
 - It is **not** a context/token overflow at this scale (~360/4096 tokens) and
   **not** a request-size issue — it is an input-dependent NPU graph bug,
   introduced/regressed in the V79 QAIRT build.
+- **Mechanism candidate (to verify with QnnProfiler):** the two triggers are
+  extreme outliers in opposite directions (densest image / darkest image). A
+  value going out of the HTP's fixed-point range (e.g. attention logits,
+  normalization statistics, or the merged position ids for these pixel
+  distributions) could yield NaN/denormal values inside the graph; the DSP then
+  fails to terminate instead of reporting an error. Symptoms match a stall
+  (0% CPU, no fault) rather than a fault.
 - To go deeper requires Qualcomm-side tooling that the app cannot expose:
   QnnProfiler / QNN SaND / HTP performance counters on the CDSP, and repro
   natively via `geniex serve` with the same PNG + prompt.
@@ -175,16 +238,20 @@ an edge case, there is no fallback.
 
 ## Suggested next steps (author side)
 
-1. Reproduce natively: `geniex serve` + `output/repro_18777.png` + the full
-   ScreenQA prompt (406 chars). Confirm hang without the HTTP layer.
+1. Reproduce natively: `geniex serve` + `output/repro_18777.png` (and
+   `output/trigger_5362.png`) + the full ScreenQA prompt (406 chars). Confirm
+   hang without the HTTP layer.
 2. If confirmed, run under QnnProfiler to see the DSP-side graph state (which
-   node/context is stuck, HTP cycle counters).
+   node/context is stuck, HTP cycle counters, NaN/denormal flags if exposed).
 3. Check whether the vision-encoder graph input (32×32 grid + mrope position
-   ids) has a static-shape edge case for this image's preprocessed pixels
-   combined with longer text sequences.
-4. Consider `enable-graph-switching: true` and/or a prefill watchdog/timeout in
+   ids) has a static-shape edge case for these images' preprocessed pixels
+   (extreme brightness/density outliers) combined with longer text sequences.
+4. Investigate fixed-point range violations: feed the two trigger PNGs through
+   the QAIRT preprocessing offline and inspect intermediate values (pixel
+   normalization, attention logits) for out-of-range/NaN before the HTP graph.
+5. Consider `enable-graph-switching: true` and/or a prefill watchdog/timeout in
    the SDK wrapper so a stuck graph can be aborted instead of blocking forever.
-5. Consider enforcing `max_tokens` clamp so prompt+generation never exceeds the
+6. Consider enforcing `max_tokens` clamp so prompt+generation never exceeds the
    compiled context (the app currently forwards `max_tokens=4096` from clients).
 
 ## Client-side workarounds (current)
@@ -192,13 +259,14 @@ an edge case, there is no fallback.
 - Keep text prompts < ~250 chars when sending images (dodges the trigger).
 - Cap `max_tokens` at ≤1024 (author's own evals use 32).
 - Watchdog: restart the app when the endpoint goes silent (pending).
-- Skip/handle `screen_id=18777` in ScreenQA runs until fixed.
+- Skip/handle `screen_id=18777` and `screen_id=5362` in ScreenQA runs until fixed.
 
 ## Repro artifacts
 
 | Artifact | Path |
 |---|---|
-| Exact request repro | `examples/repro_18777.py` (screensuite repo) |
-| Image sent to the model | `output/repro_18777.png` (+ base64 in `output/repro_18777_b64.txt`) |
+| Exact request repro (18777) | `examples/repro_18777.py` (screensuite repo) |
+| Trigger images (resized, what the model sees) | `output/repro_18777.png`, `output/trigger_5362.png` (+ base64 in `output/repro_18777_b64.txt`) |
 | Debug runner (timings + server ping) | `examples/debug_samples.py` |
+| Full-run evidence (500 samples, 2 bursts) | `output/debug_samples.jsonl` |
 | Server logs captured during hang | `output/server_log_18777.txt`, `output/server_log_10165.txt` (logcat `QcomLLMServer` + `GenieXSdk` filtered) |
