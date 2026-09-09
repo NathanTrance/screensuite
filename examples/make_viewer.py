@@ -152,9 +152,9 @@ function show(id) {
     '<div class="card">' +
       '<div class="row">' +
         '<div class="images"><div class="label">raw image ' + (r.raw_dims ? r.raw_dims.join('x') : '') + '</div>' +
-          '<img src="' + r.image + '" onerror="this.style.display=\'none\'"></div>' +
+          "<img src='" + r.image + "'></div>" +
         '<div class="images"><div class="label">resized (what the model sees) ' + (r.resized_dims ? r.resized_dims.join('x') : '') + '</div>' +
-          '<img src="' + r.resized_image + '" onerror="this.style.display=\'none\'"></div>' +
+          "<img src='" + r.resized_image + "'></div>" +
       '</div>' +
       '<div class="label">screen_id / file</div><div>' + esc(r.sample_id) + ' — ' + esc(r.file_name) + '</div>' +
       '<div class="label">question</div><div>' + esc(r.question) + '</div>' +
