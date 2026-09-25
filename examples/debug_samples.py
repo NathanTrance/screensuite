@@ -137,7 +137,7 @@ def main():
     parser.add_argument("--api-base", default="http://localhost:18181/v1")
     parser.add_argument("--api-key", default="EMPTY")
     parser.add_argument("--model-id", default="Qwen3-VL-4B-Instruct-V79")
-    parser.add_argument("--max-tokens", type=int, default=4096)
+    parser.add_argument("--max-tokens", type=int, default=256, help="Generation cap (default 256; use 16 to see repetition loops, 4096 to reproduce the server wedge)")
     parser.add_argument("--api-timeout", type=float, default=5.0)
     parser.add_argument("--ping-interval", type=float, default=2.0)
     parser.add_argument("--max-recovery-wait", type=float, default=600.0,

@@ -20,8 +20,8 @@ import json
 import os
 from datetime import datetime
 
-from dotenv import load_dotenv
 import httpx
+from dotenv import load_dotenv
 
 try:
     from smolagents import OpenAIModel
@@ -92,16 +92,20 @@ def main():
                         help="Model name as served by the endpoint")
     parser.add_argument("--n-samples", type=int, default=300, help="Max samples per benchmark")
     parser.add_argument("--workers", type=int, default=4, help="Parallel workers")
-    parser.add_argument("--max-tokens", type=int, default=4096)
+    parser.add_argument("--max-tokens", type=int, default=None,
+                        help="Override the benchmark's own max_tokens. Leave unset to use each "
+                             "benchmark config's value (smolagents gives model-constructor kwargs "
+                             "priority over per-call kwargs, so a default here would silently "
+                             "override the configs - that caused 4096-token repetition loops).")
     parser.add_argument("--run-name", type=str, default=None)
     parser.add_argument("--smoke", action="store_true", help="Quick sanity check: 20 samples, 1 worker")
     parser.add_argument("--load-full", action="store_true",
                         help="Load the full dataset instead of slicing to the number of samples "
                              "(matches the blog protocol exactly; much slower first run)")
-    parser.add_argument("--max-retries", type=int, default=2,
+    parser.add_argument("--max-retries", type=int, default=5,
                         help="Max retries for API calls (default: 2)")
-    parser.add_argument("--api-timeout", type=float, default=60.0,
-                        help="API request timeout in seconds (default: 60)")
+    parser.add_argument("--api-timeout", type=float, default=10.0,
+                        help="API request timeout in seconds (default: 10)")
     parser.add_argument("--insecure", action="store_true",
                         help="Skip TLS certificate verification for the model endpoint "
                              "(use only on trusted networks / corporate proxies with self-signed certs)")
@@ -138,9 +142,12 @@ def main():
         model_id=args.model_id,
         api_base=args.api_base,
         api_key=args.api_key,
-        max_tokens=args.max_tokens,
         temperature=0,
     )
+    if args.max_tokens is not None:
+        # NOTE: smolagents prioritizes constructor kwargs over per-call kwargs, so setting
+        # max_tokens here would override each benchmark config's limit. Only do it on request.
+        model_kwargs["max_tokens"] = args.max_tokens
     # More retries: on-device / flaky endpoints intermittently drop connections;
     client_kwargs: dict = {"max_retries": args.max_retries}
     if args.api_timeout:
