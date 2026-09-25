@@ -45,19 +45,21 @@ if [ ! -f "$ZIP_NAME" ]; then
 fi
 ls -lh "$ZIP_NAME"
 
-# 2. extract (find the directory containing geniex.json)
+# 2. extract (find the directory containing part1_of_4.bin — the file the app loads;
+#    note: current AI Hub bundles no longer ship geniex.json, the app doesn't need it)
 echo ">>> extracting..."
 rm -rf extracted && mkdir extracted
 unzip -q -o "$ZIP_NAME" -d extracted
-BUNDLE_DIR=$(dirname "$(find extracted -name geniex.json -print -quit)")
-if [ -z "$BUNDLE_DIR" ] || [ ! -f "$BUNDLE_DIR/geniex.json" ]; then
-    echo "ERROR: geniex.json not found in extracted zip"; exit 1
+BUNDLE_DIR=$(dirname "$(find extracted -name part1_of_4.bin -print -quit)")
+if [ -z "$BUNDLE_DIR" ] || [ ! -f "$BUNDLE_DIR/part1_of_4.bin" ] || [ ! -f "$BUNDLE_DIR/genie_config.json" ]; then
+    echo "ERROR: part1_of_4.bin / genie_config.json not found in extracted zip"; exit 1
 fi
 echo ">>> bundle dir: $BUNDLE_DIR"
 ls "$BUNDLE_DIR" | head -8
 
 # 3. push to the phone (contents directly under the expected directory)
 adb -s "$SERIAL" root >/dev/null 2>&1 || true
+adb -s "$SERIAL" wait-for-device
 sleep 2
 adb -s "$SERIAL" shell "mkdir -p $DEVICE_DIR"
 echo ">>> pushing ~4.4 GB (this takes a while)..."
