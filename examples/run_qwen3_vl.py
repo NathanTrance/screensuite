@@ -102,9 +102,9 @@ def main():
     parser.add_argument("--load-full", action="store_true",
                         help="Load the full dataset instead of slicing to the number of samples "
                              "(matches the blog protocol exactly; much slower first run)")
-    parser.add_argument("--max-retries", type=int, default=5,
+    parser.add_argument("--max-retries", type=int, default=2,
                         help="Max retries for API calls (default: 2)")
-    parser.add_argument("--api-timeout", type=float, default=10.0,
+    parser.add_argument("--api-timeout", type=float, default=60.0,
                         help="API request timeout in seconds (default: 10)")
     parser.add_argument("--insecure", action="store_true",
                         help="Skip TLS certificate verification for the model endpoint "
