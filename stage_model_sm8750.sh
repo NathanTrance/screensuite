@@ -16,6 +16,10 @@
 # =============================================================================
 set -euo pipefail
 
+# Git-bash/MSYS would rewrite adb device paths like /storage/... into
+# C:/Program Files/Git/storage/... — disable path conversion for this script.
+export MSYS_NO_PATHCONV=1
+
 VERSION="${VERSION:-v0.62.0}"
 SERIAL="${SERIAL:-68a063cd}"
 DEVICE_DIR="/storage/emulated/0/Download/Qwen3-VL-4B-Instruct-V79"
