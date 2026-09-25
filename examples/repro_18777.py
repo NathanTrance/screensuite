@@ -35,12 +35,15 @@ def main():
     parser.add_argument("--api-base", default="http://localhost:18181/v1")
     parser.add_argument("--model", default="Qwen3-VL-4B-Instruct-V79")
     parser.add_argument("--timeout", type=float, default=60.0)
+    parser.add_argument("--max-tokens", type=int, default=256,
+                        help="Generation cap (default 256). Use 16 to see the repetition loop, "
+                             "4096 to reproduce the full mutex-blocking wedge.")
     args = parser.parse_args()
 
     b64 = base64.b64encode(open(args.image, "rb").read()).decode()
     payload = {
         "model": args.model,
-        "max_tokens": 4096,
+        "max_tokens": args.max_tokens,
         "temperature": 0,
         "stream": False,
         "messages": [{

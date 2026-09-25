@@ -34,8 +34,9 @@ class ScreenQaConfig(HubBaseBenchmarkConfig):
     system_prompt: ScreenQaPrompt
     """System prompt"""
 
-    max_tokens: int = 1024
-    """Maximum number of tokens in the completion."""
+    max_tokens: int = 256
+    """Maximum number of tokens in the completion. Capped at 256 to bound the damage of
+    repetition-loop generations (W4A16 V79 loops on some inputs; answers are short anyway)."""
 
     temperature: float = 0.0
     """Sampling temperature."""

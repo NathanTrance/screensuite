@@ -145,12 +145,17 @@ curl -s -m 60 -X POST http://localhost:18181/v1/chat/completions \\
 - `img-enc-htp.json`: vision-param 32x32
 - `htp_backend_ext_config.json`: `dsp_arch: v79`, `perf_profile: burst`
 
-## Hypothesis
+## Root cause (confirmed 2026-09-25)
 
-Out-of-range fixed-point values (attention/normalization statistics) for these
-extreme pixel distributions cause NaN/denormal propagation, and the DSP graph
-never terminates instead of reporting an error (stall, not fault). Requested:
-QnnProfiler/HTP-side analysis of the stuck graph for these inputs.
+Repetition-loop decoding: 18777 -> `99999999...`, 5362 -> `11111111...` (control
+10165 -> `5 days` then EOS). Serialized inference + non-streaming generation =>
+a looping request holds the mutex for the full generation (~4096 tokens / ~25 tok/s
+= ~160 s); other requests get `503 model busy`; client timeouts do not stop the
+server-side generation. See verification.md.
+
+Fixes: cap max_tokens (128-256), server-side generation deadline,
+vlmWrapper.stopStream() on client disconnect, repetition penalty,
+re-quantization/calibration with in-domain data.
 """
     with open(os.path.join(CASE_DIR, "README.md"), "w", encoding="utf-8") as f:
         f.write(readme)
