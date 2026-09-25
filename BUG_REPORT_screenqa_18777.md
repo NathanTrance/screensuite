@@ -77,6 +77,13 @@ chunks, 0% app CPU, clean dmesg). That was wrong:
 ## Fixes / mitigations
 
 **Client (applied in this benchmark harness):**
+- FIXED 2026-09-25: `examples/run_qwen3_vl.py` set `max_tokens=4096` on the smolagents
+  model constructor, which (per smolagents' documented priority) overrides per-call
+  kwargs — silently overriding the benchmark configs' limits and re-enabling the full
+  4096-token loops. Now `max_tokens` is only set when explicitly requested; ScreenQA
+  runs use the config's 256. Clean 500-sample run after the fix: f1=0.621,
+  exact_match=0.582, proportion_missing=0.0, avg latency 0.85 s; both loop samples
+  completed in ~11 s each without wedging the server.
 - Cap `max_tokens` for QA-style benchmarks at **≤256** (answers are short;
   caps loop damage to ~10 s). ScreenQA config now uses 256.
 - Keep per-request client timeouts but do not rely on them to release the mutex.
